@@ -1,0 +1,19 @@
+domain: bobfintech.com
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: bobft-elasticsearch-operator
+repo: Bobft-ElasticSearch-Operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: bobfintech.com
+  group: elastic
+  kind: Elasticsearch
+  path: Bobft-ElasticSearch-Operator/api/v1alpha1
+  version: v1alpha1
+version: "3"
