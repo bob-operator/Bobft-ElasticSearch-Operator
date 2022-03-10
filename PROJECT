@@ -16,4 +16,9 @@ resources:
   kind: Elasticsearch
   path: Bobft-ElasticSearch-Operator/api/v1alpha1
   version: v1alpha1
+- controller: true
+  domain: bobfintech.com
+  group: elastic
+  kind: ElasticsearchStatus
+  version: v1alpha1
 version: "3"

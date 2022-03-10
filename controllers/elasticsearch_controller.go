@@ -40,17 +40,9 @@ type ElasticsearchReconciler struct {
 }
 
 type OwnResource interface {
-	// 根据ElasticSearch的指定，生成相应的各类own_resources资源对象，用作创建或更新
-	//MakeOwnResource(instance *elasticv1alpha1.Elasticsearch, logger logr.Logger, scheme *runtime.Scheme) (interface{}, error)
 
-	// 判断此资源是否已存在
-	//OwnResourceExist(instance *elasticv1alpha1.Elasticsearch, client client.Client, logger logr.Logger) (bool, interface{}, error)
-
-	// 获取ElasticSearch对应的own_resource的状态，用来填充ElasticSearch的status字段
-	//UpdateOwnResourceStatus(instance *elasticv1alpha1.Elasticsearch, client client.Client, logger logr.Logger) (*elasticv1alpha1.Elasticsearch, error)
-
-	// 创建/更新获取ElasticSearch对应的own_resource的状态对应的own_resource资源
 	ApplyOwnResource(instance *elasticv1alpha1.Elasticsearch, client client.Client, logger logr.Logger, scheme *runtime.Scheme) error
+
 }
 
 //+kubebuilder:rbac:groups=elastic.bobfintech.com,resources=elasticsearches,verbs=get;list;watch;create;update;patch;delete
@@ -74,7 +66,6 @@ type OwnResource interface {
 func (r *ElasticsearchReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logs.FromContext(ctx)
 
-	// Get操作,获取 Unit object
 	instance := &elasticv1alpha1.Elasticsearch{}
 
 	err := r.Get(ctx, req.NamespacedName, instance)
@@ -86,8 +77,6 @@ func (r *ElasticsearchReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	// Create or Update操作
-	// 根据ElasticSearch.Spec 生成ElasticSearch关联的所有own_resource
 	ownResources, err := r.getOwnResources(instance)
 	if err != nil {
 		msg := fmt.Sprintf("%s %s Reconciler.getOwnResource() function error", instance.Namespace, instance.Name)
@@ -95,7 +84,6 @@ func (r *ElasticsearchReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	// 3.2 判断各own resource 是否存在，不存在则创建，存在则判断spec是否有变化，有变化则更新
 	for _, ownResource := range ownResources {
 		if err = ownResource.ApplyOwnResource(instance, r.Client, log, r.Scheme); err != nil {
 			log.Error(err,"ApplyOwnResource Failed!!!")
@@ -121,7 +109,6 @@ func LabelsSelectorForElastic(name string) *metav1.LabelSelector{
 
 }
 
-// 根据Unit.Spec生成其所有的own resource
 func (r *ElasticsearchReconciler) getOwnResources(instance *elasticv1alpha1.Elasticsearch) ([]OwnResource, error) {
 	var ownResources []OwnResource
 	
@@ -135,7 +122,6 @@ func (r *ElasticsearchReconciler) getOwnResources(instance *elasticv1alpha1.Elas
 
 	ownResources = append(ownResources, ownStatefulSet)
 
-	// 将关联的资源(svc/cm/pvc)加入ownResources中
 	if instance.Spec.Service != nil {
 		ownResources = append(ownResources, instance.Spec.Service)
 	}

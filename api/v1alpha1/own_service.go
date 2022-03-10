@@ -94,7 +94,6 @@ func (ownService *OwnService) UpdateOwnResourceStatus(instance *Elasticsearch, c
 
 	var portsStatus []ServicePortStatus
 	for _, port := range found.Spec.Ports {
-		// 对 service的每一个端口进行健康检查，并在status中加上健康状态的字段
 		health := true
 		checkPort := port.Port
 		addr := found.Spec.ClusterIP
@@ -119,7 +118,6 @@ func (ownService *OwnService) UpdateOwnResourceStatus(instance *Elasticsearch, c
 	}
 	instance.Status.OwnResourcesStatus.Service = serviceStatus
 
-	// 更新Endpoint status
 	foundEndpoint := &corev1.Endpoints{}
 	err = client.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, foundEndpoint)
 	if err != nil {
@@ -138,17 +136,13 @@ func (ownService *OwnService) UpdateOwnResourceStatus(instance *Elasticsearch, c
 		}
 		instance.Status.OwnResourcesStatus.Endpoint = endpointsStatus
 	}
-
-	// update LastUpdateTime
 	instance.Status.LastUpdateTime = metav1.Now()
 
 	return instance, nil
 }
 
-// apply this own resource, create or update
 func (ownService *OwnService) ApplyOwnResource(instance *Elasticsearch, client client.Client, logger logr.Logger, scheme *runtime.Scheme) error {
 
-	// assert if Service exist
 	existA, foundA, err := ownService.OwnServiceExist(instance, client, logger)
 	if err != nil {
 		return err
@@ -158,19 +152,16 @@ func (ownService *OwnService) ApplyOwnResource(instance *Elasticsearch, client c
 		return err
 	}
 
-	// make Service object
 	newService, err := ownService.MakeOwnService(instance, logger, scheme)
 	if err != nil {
 		return err
 	}
 
-	// make Service object
 	newHeadlessService, err := ownService.MakeOwnHeadlessService(instance, logger, scheme)
 	if err != nil {
 		return err
 	}
 
-	// apply the Service object just make
 	if !existA {
 		// if Service not exist，then create it
 		msg := fmt.Sprintf("Service %s/%s not found, create it!", newService.Namespace, newService.Name)
@@ -193,7 +184,6 @@ func (ownService *OwnService) ApplyOwnResource(instance *Elasticsearch, client c
 			}
 		}
 	}
-	// apply the Service object just make
 	if !existB {
 		// if Service not exist，then create it
 		msg := fmt.Sprintf("HeadLessService %s/%s not found, create it!", newService.Namespace, newService.Name)
@@ -208,7 +198,6 @@ func (ownService *OwnService) ApplyOwnResource(instance *Elasticsearch, client c
 		newHeadlessService.Spec.ClusterIP = foundServiceB.Spec.ClusterIP
 		newHeadlessService.Spec.SessionAffinity = foundServiceB.Spec.SessionAffinity
 
-		// if Service exist with change，then try to update it
 		if !reflect.DeepEqual(newHeadlessService.Spec, foundServiceB.Spec) {
 			msg := fmt.Sprintf("Updating HeadLessService %s/%s", newHeadlessService.Namespace, newHeadlessService.Name)
 			logger.Info(msg)
@@ -237,7 +226,6 @@ func (ownService *OwnService) MakeOwnService(instance *Elasticsearch, logger log
 	}
 	svc.Spec.Selector = labelsSelectorForElastic(instance.Name).MatchLabels
 
-	// add ControllerReference for sts，the owner is ElasticSearch object
 	if err := controllerutil.SetControllerReference(instance, svc, scheme); err != nil {
 		msg := fmt.Sprintf("set controllerReference for Service %s/%s failed", instance.Namespace, instance.Name)
 		logger.Error(err, msg)
@@ -262,7 +250,6 @@ func (ownService *OwnService) MakeOwnHeadlessService(instance *Elasticsearch, lo
 	svc.Spec.Type = "ClusterIP"
 	svc.Spec.ClusterIP = "None"
 
-	// add ControllerReference for sts，the owner is ElasticSearch object
 	if err := controllerutil.SetControllerReference(instance, svc, scheme); err != nil {
 		msg := fmt.Sprintf("set controllerReference for Service %s/%s failed", instance.Namespace, instance.Name)
 		logger.Error(err, msg)

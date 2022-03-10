@@ -22,10 +22,9 @@ type OwnStatefulSet struct {
 }
 
 func (ownStatefulSet *OwnStatefulSet) MakeOwnResource(instance *Elasticsearch, logger logr.Logger, scheme *runtime.Scheme) (interface{}, error) {
-	// new a StatefulSet object
+
 	ownStatefulSet.Spec.Replicas = &instance.Spec.Size
 	sts := &appsv1.StatefulSet{
-		// metadata field inherited from owner Unit
 		ObjectMeta: metav1.ObjectMeta{
 			Name: instance.Name,
 			Namespace: instance.Namespace,
@@ -46,7 +45,6 @@ func (ownStatefulSet *OwnStatefulSet) MakeOwnResource(instance *Elasticsearch, l
 	volumes = append(volumes,volumeConfig)
 	sts.Spec.Template.Spec.Volumes = volumes
 
-	// add ControllerReference for sts，the owner is ElasticSearch object
 	if err := controllerutil.SetControllerReference(instance, sts, scheme); err != nil {
 		msg := fmt.Sprintf("set controllerReference for StatefulSet %s/%s failed", instance.Namespace, instance.Name)
 		logger.Error(err, msg)
@@ -57,7 +55,6 @@ func (ownStatefulSet *OwnStatefulSet) MakeOwnResource(instance *Elasticsearch, l
 
 }
 
-// Check if the StatefulSet already exists
 func (ownStatefulSet *OwnStatefulSet) OwnResourceExist(instance *Elasticsearch, client client.Client, logger logr.Logger) (bool, interface{}, error) {
 
 	found := &appsv1.StatefulSet{}
@@ -189,6 +186,9 @@ func (ownStatefulSet *OwnStatefulSet) MakePodTemplate(instance *Elasticsearch) (
 	headlessServiceNameEnv := corev1.EnvVar{}
 	headlessServiceNameEnv.Name = "HEADLESS_SERVICE_NAME"
 	headlessServiceNameEnv.Value = instance.Name + "-headless-service"
+	discoverySeedHostsEnv := corev1.EnvVar{}
+	discoverySeedHostsEnv.Name = "discovery.seed_hosts"
+	discoverySeedHostsEnv.Value = instance.Name + "-headless-service"
 
 	envs = append(envs,jvmEnv)
 	envs = append(envs,clusterNameEnv)
@@ -196,6 +196,7 @@ func (ownStatefulSet *OwnStatefulSet) MakePodTemplate(instance *Elasticsearch) (
 	envs = append(envs,nodeNameEnv)
 	envs = append(envs,namespaceNameEnv)
 	envs = append(envs,headlessServiceNameEnv)
+	envs = append(envs,discoverySeedHostsEnv)
 
 	ports := []corev1.ContainerPort{}
 	portA := corev1.ContainerPort{}
@@ -242,24 +243,52 @@ func labelsSelectorForElastic(name string) *metav1.LabelSelector{
 
 }
 
-// apply this own resource, create or update
+func InitESClusterEnvValue(instance *Elasticsearch) string {
+	initESClusterEnvValue := ""
+	if instance.Spec.Size%2 == 0 {
+		for i := 0; i < int(instance.Spec.Size)-1; i++ {
+			initESClusterEnvValue = initESClusterEnvValue + instance.Name + "-" + strconv.Itoa(i) + "." + instance.Name + "-headless-service" + "." + instance.Namespace + ".svc.cluster.local,"
+		}
+	} else {
+		for i := 0; i < int(instance.Spec.Size); i++ {
+			initESClusterEnvValue = initESClusterEnvValue + instance.Name + "-" + strconv.Itoa(i) + "." + instance.Name + "-headless-service" + "." + instance.Namespace + ".svc.cluster.local,"
+		}
+	}
+	return initESClusterEnvValue
+}
+
 func (ownStatefulSet *OwnStatefulSet) ApplyOwnResource(instance *Elasticsearch, client client.Client, logger logr.Logger, scheme *runtime.Scheme) error {
 
-	// assert if StatefulSet exist
 	exist, found, err := ownStatefulSet.OwnResourceExist(instance, client, logger)
 	if err != nil {
 		return err
 	}
 
-	// make StatefulSet object
 	sts, err := ownStatefulSet.MakeOwnResource(instance, logger, scheme)
 	if err != nil {
 		return err
 	}
 	newStatefulSet := sts.(*appsv1.StatefulSet)
-	// apply the StatefulSet object just make
 	if !exist {
-		// if StatefulSet not exist，then create it
+		initESClusterEnvExist := false
+		containerdID := 0
+		for keyA,valueA := range newStatefulSet.Spec.Template.Spec.Containers{
+			if valueA.Name == "elasticsearch" {
+				containerdID = keyA
+			}
+			for keyB,_ := range valueA.Env{
+				if valueA.Env[keyB].Name == "cluster.initial_master_nodes"{
+					initESClusterEnvExist = true
+				}
+			}
+		}
+		if initESClusterEnvExist == false {
+			initESClusterEnv := corev1.EnvVar{}
+			initESClusterEnv.Name = "cluster.initial_master_nodes"
+			initESClusterEnv.Value = InitESClusterEnvValue(instance)
+			newStatefulSet.Spec.Template.Spec.Containers[containerdID].Env = append(newStatefulSet.Spec.Template.Spec.Containers[containerdID].Env,initESClusterEnv)
+		}
+
 		msg := fmt.Sprintf("StatefulSet %s/%s not found, create it!", newStatefulSet.Namespace, newStatefulSet.Name)
 		logger.Info(msg)
 		if err := client.Create(context.TODO(), newStatefulSet); err != nil {
@@ -270,7 +299,21 @@ func (ownStatefulSet *OwnStatefulSet) ApplyOwnResource(instance *Elasticsearch, 
 	} else {
 		foundStatefulSet := found.(*appsv1.StatefulSet)
 
-		// if StatefulSet exist with change，then try to update it
+		containerdID := 0
+		for keyA,valueA := range foundStatefulSet.Spec.Template.Spec.Containers{
+			if valueA.Name == "elasticsearch" {
+				containerdID = keyA
+			}
+			for keyB,_ := range valueA.Env{
+				if valueA.Env[keyB].Name == "cluster.initial_master_nodes"{
+					initESClusterEnv := corev1.EnvVar{}
+					initESClusterEnv.Name = "cluster.initial_master_nodes"
+					initESClusterEnv.Value = valueA.Env[keyB].Value
+					newStatefulSet.Spec.Template.Spec.Containers[containerdID].Env = append(newStatefulSet.Spec.Template.Spec.Containers[containerdID].Env,initESClusterEnv)
+				}
+			}
+		}
+
 		if !reflect.DeepEqual(newStatefulSet.Spec, foundStatefulSet.Spec) {
 			msg := fmt.Sprintf("Updating StatefulSet %s/%s", newStatefulSet.Namespace, newStatefulSet.Name)
 			logger.Info(msg)

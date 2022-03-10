@@ -3,7 +3,7 @@ kind: Elasticsearch
 metadata:
   name: demo-elasticsearch
 spec:
-  size: 3
+  size: 5
   image: docker.elastic.co/elasticsearch/elasticsearch:7.16.2
   jvm: "-Xms2g -Xmx2g"
   env:

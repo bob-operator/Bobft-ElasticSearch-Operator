@@ -1,4 +1,5 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
 - elastic_v1alpha1_elasticsearch.yaml
+- elastic_v1alpha1_elasticsearchstatus.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

@@ -67,7 +67,6 @@ func (ownConfig *OwnConfig) MakeOwnResource(instance *Elasticsearch, logger logr
 	dataString := string(dataType)
 	configMapData["elasticsearch.yml"] = dataString
 	cm := &corev1.ConfigMap{
-		// metadata field inherited from owner Unit
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name + "-cm",
 			Namespace: instance.Namespace,
@@ -75,7 +74,6 @@ func (ownConfig *OwnConfig) MakeOwnResource(instance *Elasticsearch, logger logr
 	}
 	cm.Data = configMapData
 
-	// add ControllerReference for sts，the owner is ElasticSearch object
 	if err := controllerutil.SetControllerReference(instance, cm, scheme); err != nil {
 		msg := fmt.Sprintf("set controllerReference for ConfigMap %s/%s failed", instance.Namespace, instance.Name)
 		logger.Error(err, msg)
@@ -86,7 +84,6 @@ func (ownConfig *OwnConfig) MakeOwnResource(instance *Elasticsearch, logger logr
 
 }
 
-// Check if the StatefulSet already exists
 func (ownConfig *OwnConfig) OwnResourceExist(instance *Elasticsearch, client client.Client, logger logr.Logger) (bool, interface{}, error) {
 
 	found := &corev1.ConfigMap{}
@@ -103,7 +100,6 @@ func (ownConfig *OwnConfig) OwnResourceExist(instance *Elasticsearch, client cli
 
 }
 
-// apply this own resource, create or update
 func (ownConfig *OwnConfig) ApplyOwnResource(instance *Elasticsearch, client client.Client, logger logr.Logger, scheme *runtime.Scheme) error {
 
 	// assert if StatefulSet exist
